@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-26.04-arm
     permissions:
       contents: write # needed to upload the files to the release
+      id-token: write # needed to sign the build provenance attestation
+      attestations: write # needed to store the attestation
     steps:
       # The only heavy thing this job needs is the llvm4msvc image, so we can
       # remove everything else that is pre-installed on the runner. Every
@@ -53,6 +55,13 @@ jobs:
           cd dist
           sha256sum auto-office-windows-amd64.exe > auto-office-windows-amd64.exe.sha256
           cat auto-office-windows-amd64.exe.sha256
+
+      # Signed build provenance, verifiable with:
+      #   gh attestation verify auto-office-windows-amd64.exe --repo <owner>/<repo>
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/auto-office-windows-amd64.exe
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
