@@ -1,0 +1,70 @@
+# Cross-compiles auto-office.exe (Windows amd64) on a native arm64 Linux runner
+# using the highcanfly/llvm4msvc Docker image (clang-cl + lld-link + Windows SDK),
+# then attaches it to the GitHub release.
+name: Build Windows amd64 release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build auto-office.exe (Windows amd64)
+    runs-on: ubuntu-26.04-arm
+    permissions:
+      contents: write # needed to upload the files to the release
+    steps:
+      # The only heavy thing this job needs is the llvm4msvc image, so we can
+      # remove everything else that is pre-installed on the runner. Every
+      # category is listed explicitly to make the choice obvious.
+      - name: Optimize disk space
+        uses: sctg-development/clean-image-for-docker@v2
+        with:
+          remove-development-tools: "true" # compilers run inside the container
+          remove-browsers: "true"
+          remove-databases: "true"
+          remove-cloud-tools: "true"
+          remove-testing-tools: "true"
+          remove-documentation: "true"
+          remove-android: "true"
+          remove-cached-tools: "true"
+          show-top-packages: "false"
+
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      # The image is multi-arch: the arm64 variant runs natively here and
+      # cross-compiles to x86_64-pc-windows-msvc, so no QEMU is involved.
+      - name: Run the unit tests
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/src -w /src \
+            highcanfly/llvm4msvc:latest ./test/run-tests.sh
+
+      - name: Build auto-office.exe
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/src -w /src \
+            highcanfly/llvm4msvc:latest ./build.sh
+
+      - name: Prepare release files
+        run: |
+          mkdir -p dist
+          cp build/auto-office.exe dist/auto-office-windows-amd64.exe
+          cd dist
+          sha256sum auto-office-windows-amd64.exe > auto-office-windows-amd64.exe.sha256
+          cat auto-office-windows-amd64.exe.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: auto-office-windows-amd64
+          path: dist/*
+          if-no-files-found: error
+
+      # Only for real releases; a manual run just keeps the artifact above.
+      - name: Upload to the release
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/* --clobber

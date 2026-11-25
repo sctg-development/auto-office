@@ -1,0 +1,7 @@
+# build output
+build/
+# Office Deployment Tool and configuration used for demonstrations
+# (setup.exe is a 7 MB Microsoft binary; the XML may contain product keys)
+setup.exe
+office-2024.xml
+office-2024.exe
